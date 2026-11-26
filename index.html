@@ -1078,7 +1078,7 @@ function vLogin() {
   ${CONFIG.mode === 'local' ? '<div class="banner">測試模式：資料只存在這台裝置，正式使用前需接上院內 Microsoft 365。</div>' : ''}
   ${stepBar(step)}
   <div class="card"><h2>點班人員${LG.staff ? `<span class="right selname">${esc(LG.staff)}<button class="btn sm" onclick="LG.staff='';LG.role='';render()">換人</button></span>` : ''}</h2>
-  ${!staff.length ? '<p class="muted">尚未建立人員名單，請主管到「管理 > 人員」新增。</p>' : LG.staff ? '' : `
+  ${!staff.length ? staffImportBox() : LG.staff ? '' : `
     <input class="t" id="nameQ" placeholder="輸入姓氏或名字快速找" autocomplete="off" value="${esc(LG.q || '')}" oninput="filterNames(this.value)">
     <div id="nameGroups">
     ${roster ? `<div class="grp"><div class="gh">本班人員<span>依 ${LG.date.slice(5).replace('-', '/')} 班表・${shiftName(LG.shift)} ${onShift.length} 位</span></div>
@@ -1510,6 +1510,32 @@ function saveBox() {
   toast(low ? `緊急處置盒有 ${low} 項不足` : '緊急處置盒已點', low ? 'warn' : 'ok');
 }
 
+
+
+/* ===================== 人員名單匯入（加密內建，輸入匯入碼解開） ===================== */
+const STAFF_ENC = {"s": "3ED6vIRQEQuhbjByc1dwmQ==", "i": "rIp+z5/Kj4BrGds8", "c": "0OIdgzOCadNtySUGU2QAO1f+1JrsvYmz9IjyVaYdddsob7qiw8Oz38lnLniV95vs9He1vy3RzuIPrtS1TKmftl8y53AM3E0Wwv09L/dUy1DPA6BTAz4MGOCsKI6AH6cTJAx1mvAJ64gUqGxZXAqO03p8bMSsAzSPVf4emCNILSFjHVJdgfMIncG/PJ5W/xeNjbIbn5NohmswnWbpFIItZnWyvpUZ4m6kGTz/o7X/Bc18oR7bZReIM9sWbE+anWogufxKUH39OEjiX7HUmedSE0EEPZbZCVwrXo7HS29q70M5cw8O9da7+PWOgf/LSqtMOPb2BVz3TTD4D/sHvniI+4+DelKzNuSPCTbtmydhoPVMQDAGAClRsrpjx1La+J9JnZG0TsMp9BpQD38m7FkCyDl30fZmuu1FESE9YyybDb2mEWbo6s26dKU8CdFyBa4caw6FEaUAYWz1fJQu/8Jh69vJIGNG2vYt6Lbtla50aDbOru0fy7plF0GM/QuZ7a7aou7Ezm2hZnS25rDKGlLfC90GuYHnlnMbgH8Iq62c8RhjKUoMhl3UPU6/K5qL5a+ILHZGPq0yB/7XQniDvKnqKjUHlburGU59d9q1zaF6XAqVGCTkPQbVYsteq2U7Ts5Fj1LljcwzwluHFeQ5pEMFld5rxG2JqXFPb60dT6Y9tO4ZyaLh2wifc8xfXgby8OSfj/+/er2dX1iZ2XZcZM/gw823Zux2cOGNppyrWev/jgWfIySxXUUcfQAkDYGux5LusTpPQjfgjErmHQ8m3X0gWFikxaI8JQSFgvB4BD2VhqzC0qS1U9VwOq+XkOZkPC0vQ9Jr7M7oMFtGxMRGIHCDL2cndwiaQbixWqjuSeNnVRpfYF8RAfgKrFCGD2flk20xpgLINyXVxegm24ueNr+z7Q5m3b4oOgE0aaLKzx/rzGgSzCSW5GDZwZbMhQirUcWQFM0RzIQYaL5lxHf46ozmUNQpT1cL3OXV0dm9ulFEqvQieSFDOR6OW3VgiivOPkfzWjKjow9DhPEQ4zwbEVB58GtkX+yDoZuBVgESzpg1wWXtrhQ/m/wvbck=", "n": 300000};
+function staffImportBox() {
+  if (!window.crypto || !crypto.subtle) return '<p class="muted">尚未建立人員名單，請主管到「管理 > 人員」新增。</p>';
+  return `<p class="muted" style="margin-top:0">這台裝置還沒有人員名單。請輸入 8 位數「人員名單匯入碼」，名單會自動加入。</p>
+    <div class="row"><input class="t" id="stCode" type="password" inputmode="numeric" maxlength="8" placeholder="8 位數匯入碼" style="flex:1" onkeydown="if(event.key==='Enter')staffImport()">
+    <button class="btn pri" onclick="staffImport()">匯入名單</button></div>
+    <p class="muted" style="font-size:12.5px;margin-bottom:0">匯入碼請洽小組長。也可以到「主管／管理 > 人員」手動新增。</p>`;
+}
+async function staffImport() {
+  const code = ($('#stCode').value || '').trim();
+  if (!/^\d{8}$/.test(code)) { toast('請輸入 8 位數匯入碼', 'bad'); return; }
+  const u8 = b => Uint8Array.from(atob(b), c => c.charCodeAt(0));
+  try {
+    toast('解開名單中…', 'info');
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(code), 'PBKDF2', false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: u8(STAFF_ENC.s), iterations: STAFF_ENC.n, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(STAFF_ENC.i) }, key, u8(STAFF_ENC.c));
+    const names = JSON.parse(new TextDecoder().decode(pt)).filter(n => !S.staff.some(s => s.name === n));
+    const recs = names.map((n, k) => ({ name: n, active: true, sort: S.staff.length + k + 1 }));
+    await Store.addMany('staff', recs); S.staff.push(...recs);
+    toast(`已匯入 ${recs.length} 位人員`, 'ok', 2200); render();
+  } catch (e) { toast('匯入碼不正確', 'bad', 2200); }
+}
 
 /* ===================== 借出系統 ===================== */
 const LOAN_ICON = '<svg viewBox="0 0 24 24"><path d="M4 7h11M11 3l4 4-4 4"/><path d="M20 17H9M13 13l-4 4 4 4"/></svg>';

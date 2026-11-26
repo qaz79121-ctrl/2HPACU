@@ -1,6 +1,6 @@
 /* 2H恢復室 財產點班：離線快取。裝一次後不需網路即可使用。
    更新網頁時把 VER 改掉，手機連上網路打開一次就會換成新版。 */
-const VER = '2h-20261126c';
+const VER = '2h-20261126d';
 const FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VER).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
